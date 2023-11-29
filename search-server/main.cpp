@@ -61,7 +61,7 @@ public:
         const vector<string> words = SplitIntoWordsNoStop(document);
         int count_words = words.size();
         for(const string& word:words){
-            word_to_document_freqs_[word][document_id]+=1./count_words;
+            word_to_document_freqs_[word][document_id] += 1./count_words;
         }
         document_count_++;
     }
@@ -82,6 +82,12 @@ public:
 
 private:
    
+    struct QueryWord {
+        string data;
+        bool is_minus;
+        bool is_stop;
+    };
+
     struct QueryWords {
         set <string> minus_words;
         set <string> plus_words;
@@ -108,12 +114,24 @@ private:
     }
 
     QueryWords ParseQuery(const string& text) const {
-        QueryWords query_words;
-        for (const string& word : SplitIntoWordsNoStop(text)) {
-            if(word[0] == '-')query_words.minus_words.insert(word.substr(1));
-            else query_words.plus_words.insert(word);
+        QueryWords query;
+        for (const string& word : SplitIntoWords(text)) {
+            const QueryWord query_word = ParseQueryWord(word);
+            if(!query_word.is_stop){
+                if(query_word.is_minus)query.minus_words.insert(query_word.data);
+                else query.plus_words.insert(query_word.data);
+            }
         }
-        return query_words;
+        return query;
+    }
+
+    QueryWord ParseQueryWord(string word) const {
+        bool is_minus = false;
+        if (word[0] == '-') {
+            is_minus = true;
+            word = word.substr(1);
+        }
+        return {word, is_minus, IsStopWord(word)};
     }
 
     vector<Document> FindAllDocuments(const QueryWords& query_words) const {
@@ -122,10 +140,9 @@ private:
         for(const string& word:query_words.plus_words){
             if(word_to_document_freqs_.count(word)){
                 int docs_with_word = (word_to_document_freqs_.at(word)).size();
-                for(auto& [key, val] : word_to_document_freqs_.at(word)){
-                    
-                    document_to_relevance[key]+= 
-                        log((static_cast<double>(document_count_))/docs_with_word) * val;
+                double idf_word = log((static_cast<double>(document_count_))/docs_with_word);
+                for(auto& [key, tf_word] : word_to_document_freqs_.at(word)){  
+                    document_to_relevance[key] += idf_word * tf_word;
                 }    
             }
         }
