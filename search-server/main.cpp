@@ -10,6 +10,7 @@
 using namespace std;
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
+const float MIN_DIFFERENCE_BETWEEN_RELEVANCE = 1e-6;
 
 string ReadLine() {
     string s;
@@ -83,7 +84,10 @@ public:
     template <typename StringContainer>
     explicit SearchServer(const StringContainer& stop_words)
         : stop_words_(MakeUniqueNonEmptyStrings(stop_words)) {
-        for(const string& word:stop_words_)if(!IsValidWord(word))throw invalid_argument("Incorrect document text"s);
+         if(!all_of(stop_words_.begin(), stop_words_.end(),
+          [](string word) { return IsValidWord(word); })){
+            throw invalid_argument("Incorrect document text"s);
+          }
     }
 
     explicit SearchServer(const string& stop_words_text)
@@ -95,11 +99,11 @@ public:
     void AddDocument(int document_id, const string& document, DocumentStatus status,
                      const vector<int>& ratings) {
         
-        if(document_id<0) throw invalid_argument("Invalid id"s);
-        for(const int id:documents_id_) if(document_id == id) throw invalid_argument("Invalid id"s);
+        if(document_id<0 || count(documents_id_.begin(), documents_id_.end(), document_id)){
+            throw invalid_argument("Invalid id"s);
+        } 
     
         const vector<string> words = SplitIntoWordsNoStop(document);
-        for(const string& word:words)if(!IsValidWord(word))throw invalid_argument("Incorrect document text"s);
 
         const double inv_word_count = 1.0 / words.size();
         for (const string& word : words) {
@@ -117,13 +121,11 @@ public:
     vector<Document> FindTopDocuments(const string& raw_query,
                                              DocumentPredicate document_predicate) const {
         const Query query = ParseQuery(raw_query);
-        if(!IsQueryCorrect(query))throw invalid_argument("Incorrect query"s);
-
         auto matched_documents = FindAllDocuments(query, document_predicate);
 
         sort(matched_documents.begin(), matched_documents.end(),
              [](const Document& lhs, const Document& rhs) {
-                 if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
+                 if (abs(lhs.relevance - rhs.relevance) < MIN_DIFFERENCE_BETWEEN_RELEVANCE) {
                      return lhs.rating > rhs.rating;
                  } else {
                      return lhs.relevance > rhs.relevance;
@@ -156,7 +158,6 @@ public:
     tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query,
                                                                 int document_id) const {
         const Query query = ParseQuery(raw_query);
-        if(!IsQueryCorrect(query))throw invalid_argument("Incorrect query"s);
 
         vector<string> matched_words;
         for (const string& word : query.plus_words) {
@@ -176,7 +177,7 @@ public:
                 break;
             }
         }
-        return tuple{matched_words, documents_.at(document_id).status};
+        return {matched_words, documents_.at(document_id).status};
     }
 
 private:
@@ -196,6 +197,9 @@ private:
     vector<string> SplitIntoWordsNoStop(const string& text) const {
         vector<string> words;
         for (const string& word : SplitIntoWords(text)) {
+            if(!IsValidWord(word)){
+                throw invalid_argument("Incorrect word"s);
+            }
             if (!IsStopWord(word)) {
                 words.push_back(word);
             }
@@ -239,6 +243,7 @@ private:
         Query query;
         for (const string& word : SplitIntoWords(text)) {
             const QueryWord query_word = ParseQueryWord(word);
+            if(!IsQueryCorrect(query_word))throw invalid_argument("Incorrect query"s);
             if (!query_word.is_stop) {
                 if (query_word.is_minus) {
                     query.minus_words.insert(query_word.data);
@@ -250,14 +255,15 @@ private:
         return query;
     }
 
-    static bool IsQueryCorrect(const Query& query){
+    static bool IsQueryCorrect(const QueryWord& word){
         
-        for(const string& word:query.minus_words){
-            if(word[0] =='-' || word.empty() || !IsValidWord(word)) return false;
+        if(word.is_minus){
+            if(word.data[0] =='-') return false;
         }
-        for(const string& word:query.plus_words){
-            if(!IsValidWord(word)) return false;
+        if(word.data.empty() || !IsValidWord(word.data)){
+            return false;
         }
+        
         return true;
     }
 
