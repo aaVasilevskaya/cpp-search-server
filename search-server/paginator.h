@@ -22,7 +22,7 @@ class IteratorRange{
     }
 
     It size(){
-        return end_-begin_;
+        return end_ - begin_;
     }
 
     private:

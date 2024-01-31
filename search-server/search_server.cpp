@@ -33,7 +33,7 @@ int SearchServer::GetDocumentId(int index){
 std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query,
                                                 DocumentStatus status) const {
     return FindTopDocuments(
-        raw_query, [status](int document_id, DocumentStatus document_status, int rating) {
+        raw_query, [status]([[maybe_unused]]int document_id, DocumentStatus document_status, [[maybe_unused]]int rating) {
             return document_status == status;
         });
 }
@@ -119,7 +119,9 @@ SearchServer::Query SearchServer::ParseQuery(const std::string& text) const {
     Query query;
     for (const std::string& word : SplitIntoWords(text)) {
         const QueryWord query_word = ParseQueryWord(word);
-        if(!IsQueryCorrect(query_word))throw std::invalid_argument("Incorrect query"s);
+        if(!IsQueryCorrect(query_word)){
+            throw std::invalid_argument("Incorrect query"s);
+        }
         if (!query_word.is_stop) {
             if (query_word.is_minus) {
                 query.minus_words.insert(query_word.data);
